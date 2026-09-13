@@ -12,6 +12,7 @@
     "analyse": "tsx scripts/analyse.ts"
   },
   "devDependencies": {
+    "@types/node": "^26.5.1",
     "@vitejs/plugin-basic-ssl": "^2.3.0",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",

@@ -4,9 +4,11 @@
  * This exists so the demo cases exercise exactly the same pipeline as live capture: it emits
  * per-frame ROI statistics with jittered timestamps and dropped frames, not a clean waveform.
  *
- * Pulse model: each beat is a sum of two Gaussians in time since the pulse foot, a forward
- * (systolic) wave and a later reflected/diastolic wave. This follows the multi-Gaussian PPG
- * decomposition literature (e.g. Baruch et al. 2011; Couceiro et al. 2015). In a compliant
+ * Pulse model: each beat is the sum of a forward (systolic) wave and a later reflected wave, in
+ * the spirit of PPG pulse-decomposition models (e.g. Baruch et al. 2011; Couceiro et al. 2015).
+ * The forward wave is gamma-shaped (fast rise, slower fall, smooth in every derivative) because a
+ * symmetric Gaussian puts the APG b-wave at the peak, which real pulses do not do. The reflected
+ * wave is Gaussian. In a compliant
  * vascular tree the reflected wave arrives late and is visibly separate (a dicrotic notch and
  * diastolic peak); with stiffer arteries it returns earlier and merges into systole, the
  * systolic peak is reached later and the notch disappears.
@@ -17,8 +19,8 @@ import type { Frame } from '../types';
 import { gaussian, mulberry32 } from './random';
 
 export interface PulseShape {
-  sysMu: number;   // s after foot
-  sysSigma: number;
+  sysPeak: number; // s after foot
+  sysK: number;    // gamma shape; lower = more skewed
   diaMu: number;
   diaSigma: number;
   diaAmp: number;  // relative to systolic amplitude
@@ -48,51 +50,56 @@ export const SYNTH_CASES: SynthCase[] = [
   {
     id: 'a', label: 'Case A', summary: 'Compliant pulse contour: clear dicrotic notch, early crest',
     ageYears: 58, heightCm: 172, sex: 'M', heartRate: 64, rsaMs: 45, beatJitterMs: 18,
-    pulse: { sysMu: 0.125, sysSigma: 0.045, diaMu: 0.37, diaSigma: 0.075, diaAmp: 0.55 },
+    pulse: { sysPeak: 0.15, sysK: 3, diaMu: 0.4, diaSigma: 0.07, diaAmp: 0.5 },
     perfusion: 0.012, noise: 0.25, seed: 11,
   },
   {
     id: 'b', label: 'Case B', summary: 'Intermediate contour: shallow notch, reflected wave arriving earlier',
     ageYears: 64, heightCm: 168, sex: 'M', heartRate: 72, rsaMs: 25, beatJitterMs: 12,
-    pulse: { sysMu: 0.155, sysSigma: 0.058, diaMu: 0.32, diaSigma: 0.085, diaAmp: 0.6 },
+    pulse: { sysPeak: 0.15, sysK: 3, diaMu: 0.36, diaSigma: 0.07, diaAmp: 0.55 },
     perfusion: 0.009, noise: 0.25, seed: 23,
   },
   {
-    id: 'c', label: 'Case C', summary: 'Stiff contour: late crest, no notch, merged reflected wave',
+    id: 'c', label: 'Case C', summary: 'Stiff contour: reflected wave returns in systole, no notch',
     ageYears: 71, heightCm: 165, sex: 'M', heartRate: 78, rsaMs: 10, beatJitterMs: 8,
-    pulse: { sysMu: 0.19, sysSigma: 0.075, diaMu: 0.3, diaSigma: 0.1, diaAmp: 0.62 },
+    pulse: { sysPeak: 0.12, sysK: 3, diaMu: 0.24, diaSigma: 0.08, diaAmp: 0.95 },
     perfusion: 0.006, noise: 0.25, seed: 37,
   },
   {
     id: 'motion', label: 'Movement during capture', summary: 'Case A with hand movement and a lifted finger',
     ageYears: 58, heightCm: 172, sex: 'M', heartRate: 64, rsaMs: 45, beatJitterMs: 18,
-    pulse: { sysMu: 0.125, sysSigma: 0.045, diaMu: 0.37, diaSigma: 0.075, diaAmp: 0.55 },
+    pulse: { sysPeak: 0.15, sysK: 3, diaMu: 0.4, diaSigma: 0.07, diaAmp: 0.5 },
     perfusion: 0.012, noise: 0.25, artifact: 'motion', seed: 41,
   },
   {
     id: 'no-finger', label: 'Lens not covered', summary: 'Camera sees the room instead of a fingertip',
     ageYears: 58, heightCm: 172, sex: 'M', heartRate: 64, rsaMs: 45, beatJitterMs: 18,
-    pulse: { sysMu: 0.125, sysSigma: 0.045, diaMu: 0.37, diaSigma: 0.075, diaAmp: 0.55 },
+    pulse: { sysPeak: 0.15, sysK: 3, diaMu: 0.4, diaSigma: 0.07, diaAmp: 0.5 },
     perfusion: 0.012, noise: 0.25, artifact: 'no-finger', seed: 53,
   },
 ];
 
 /** Pulse contour at time s after the foot, peak-normalised so the systolic Gaussian has height 1. */
 export function pulseAt(p: PulseShape, s: number): number {
-  if (s < -0.05) return 0;
-  const sys = Math.exp(-0.5 * ((s - p.sysMu) / p.sysSigma) ** 2);
+  if (s <= 0) return p.diaAmp * Math.exp(-0.5 * ((s - p.diaMu) / p.diaSigma) ** 2);
+  const theta = p.sysPeak / p.sysK;
+  const sys = Math.pow(s / theta, p.sysK) * Math.exp(-s / theta) / (Math.pow(p.sysK, p.sysK) * Math.exp(-p.sysK));
   const dia = p.diaAmp * Math.exp(-0.5 * ((s - p.diaMu) / p.diaSigma) ** 2);
   return sys + dia;
 }
 
-/** Ground truth derived numerically from the model, for tests. */
-export function pulseTruth(p: PulseShape): { crestTime: number } {
-  let best = 0, bestV = -Infinity;
-  for (let s = 0; s < 0.6; s += 0.0005) {
-    const v = pulseAt(p, s);
-    if (v > bestV) { bestV = v; best = s; }
-  }
-  return { crestTime: best };
+/** One noise-free beat at fs, foot to foot, baseline-corrected and peak-normalised, for a fixed period. */
+export function idealContour(p: PulseShape, periodSec: number, fs = 250): Float64Array {
+  const n = Math.round(periodSec * fs);
+  const f = (s: number) => pulseAt(p, s) + pulseAt(p, s + periodSec) + pulseAt(p, s - periodSec);
+  const x = Float64Array.from({ length: n }, (_, i) => f(i / fs));
+  const x0 = x[0];
+  const slope = (f(periodSec) - x0) / n;
+  for (let i = 0; i < n; i++) x[i] -= x0 + slope * i;
+  let peak = 0;
+  for (let i = 0; i < n; i++) peak = Math.max(peak, x[i]);
+  for (let i = 0; i < n; i++) x[i] /= peak;
+  return x;
 }
 
 export interface SynthOutput {
