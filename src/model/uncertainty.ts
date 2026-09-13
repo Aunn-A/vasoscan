@@ -45,7 +45,9 @@ function interval(values: number[]): Interval90 | null {
   return { lo: q(0.05), hi: q(0.95), median: q(0.5), n: v.length };
 }
 
-export function bootstrap(ens: Ensemble, heightCm: number | undefined, iterations = 200, seed = 1): Uncertainty {
+export function bootstrap(ens: Ensemble, heightCm: number | undefined, requestedIterations = 200, seed = 1): Uncertainty {
+  // Percentile intervals need enough resamples to mean anything
+  const iterations = Math.max(50, requestedIterations);
   const rand = mulberry32(seed);
   const rows = ens.beats.filter((_, i) => ens.accepted[i]);
   const len = ens.template.length;

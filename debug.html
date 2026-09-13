@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>VasoScan signal bench</title>
+  <link rel="stylesheet" href="/src/debug/debug.css" />
+</head>
+<body>
+  <header>
+    <h1>VasoScan signal bench</h1>
+    <p>Engineering page for checking the capture and signal pipeline. Not the product interface.</p>
+  </header>
+
+  <section class="panel">
+    <h2>Capture</h2>
+    <div class="row">
+      <label>Height (cm) <input id="height" type="number" inputmode="numeric" min="100" max="220" value="170" /></label>
+      <label>Age <input id="age" type="number" inputmode="numeric" min="10" max="110" value="30" /></label>
+      <label>Length
+        <select id="duration">
+          <option value="65">5 s settle + 60 s</option>
+          <option value="35">5 s settle + 30 s</option>
+          <option value="20">5 s settle + 15 s (quick check, will be gated)</option>
+        </select>
+      </label>
+    </div>
+    <div class="row">
+      <button id="startCam">Start camera</button>
+      <button id="recordNow" disabled>Record now</button>
+      <button id="stopCam" disabled>Stop</button>
+    </div>
+    <p class="hint">Cover the rear camera and flash with your fingertip. Recording starts by itself after 1.5 s of steady finger contact.</p>
+    <div class="live">
+      <video id="video" muted playsinline></video>
+      <dl id="liveStats"></dl>
+    </div>
+    <canvas id="liveTrace" class="plot tall"></canvas>
+    <div class="progress"><div id="progress"></div></div>
+    <p id="captureMsg" class="msg" role="status" aria-live="polite"></p>
+  </section>
+
+  <section class="panel">
+    <h2>Recordings</h2>
+    <div class="row">
+      <label>Demo case (simulated)
+        <select id="demoCase"></select>
+      </label>
+      <button id="runDemo">Run demo case</button>
+    </div>
+    <div class="row">
+      <button id="download" disabled>Download last recording (JSON)</button>
+      <label class="file">Analyse a recording file <input id="load" type="file" accept="application/json,.json" /></label>
+    </div>
+  </section>
+
+  <section class="panel" id="results" hidden>
+    <h2>Analysis</h2>
+    <p id="provenance" class="provenance"></p>
+    <div id="quality"></div>
+    <h3>Signal (detection band), beats and excluded regions</h3>
+    <canvas id="plotSignal" class="plot tall"></canvas>
+    <h3>Raw intensity of the chosen channel</h3>
+    <canvas id="plotRaw" class="plot"></canvas>
+    <div class="grid2">
+      <div>
+        <h3>Ensemble: accepted beats and mean</h3>
+        <canvas id="plotEnsemble" class="plot tall"></canvas>
+      </div>
+      <div>
+        <h3>Contour and second derivative (APG)</h3>
+        <canvas id="plotApg" class="plot tall"></canvas>
+      </div>
+    </div>
+    <h3>Pulse intervals</h3>
+    <canvas id="plotIbi" class="plot"></canvas>
+    <h3>Numbers</h3>
+    <pre id="numbers"></pre>
+  </section>
+
+  <script type="module" src="/src/debug/main.ts"></script>
+</body>
+</html>

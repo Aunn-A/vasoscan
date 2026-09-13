@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "vasoscan-dev", "runtimeExecutable": "npx", "runtimeArgs": ["vite", "--port", "5173", "--strictPort"], "port": 5173, "url": "https://localhost:5173" },
+    { "name": "vasoscan-http", "runtimeExecutable": "sh", "runtimeArgs": ["-c", "VASOSCAN_HTTP=1 npx vite --port 5174 --strictPort"], "port": 5174 }
+  ]
+}

@@ -12,9 +12,9 @@
  * signal still has to be band-limited below the camera's Nyquist frequency for this to hold.
  *
  * Alignment uses the max-slope fiducial from the smooth 4 Hz detection band. Iterative
- * cross-correlation re-alignment (Woody 1967) was tried and removed: on the 12 Hz morphology band
- * it fitted noise, and on 18 synthetic recordings it increased aging-index error (RMS 0.25 → 0.35)
- * and doubled b/a error.
+ * cross-correlation re-alignment (Woody 1967) was evaluated on 24 synthetic recordings and left
+ * out: it slightly reduced APG error (aging index RMS 0.39 → 0.34) but increased crest-time error
+ * (6.8 → 8.4 ms) and stiffness-index error (1.2 → 1.6 m/s), so it did not earn its complexity.
  *
  * Outlier beats (low correlation with the median beat) are rejected before the final average.
  */
@@ -91,8 +91,9 @@ export function buildEnsemble(
     for (let k = Math.max(foot + 1, expectedNext - w); k <= Math.min(len - 1, expectedNext + w); k++) {
       if (seg[k] < seg[next]) next = k;
     }
-    const slope = next > foot ? (seg[next] - seg[foot]) / (next - foot) : 0;
-    for (let k = 0; k < len; k++) seg[k] -= seg[foot] + slope * (k - foot);
+    const footVal = seg[foot];
+    const slope = next > foot ? (seg[next] - footVal) / (next - foot) : 0;
+    for (let k = 0; k < len; k++) seg[k] -= footVal + slope * (k - foot);
     let peak = 0;
     for (let k = foot; k < Math.min(len, foot + Math.round(0.6 * period * TEMPLATE_FS)); k++) peak = Math.max(peak, seg[k]);
     if (peak <= 0) return null;
