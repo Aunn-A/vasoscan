@@ -233,13 +233,18 @@ export function assessQuality(g: GateInputs): QualityReport {
     });
   }
   if (!issues.some((i) => i.severity === 'fail') && longest < T.minCleanSec) {
+    const parts: string[] = [];
+    if (g.frameIntervals.length) parts.push(`your finger came off the lens at ${g.frameIntervals.map(fmtTime).join(', ')}`);
+    const movementOnly = g.motionIntervals.filter((m) => !g.frameIntervals.some((f) => f.start < m.end && f.end > m.start));
+    if (movementOnly.length) parts.push(`movement disturbed the signal at ${movementOnly.map(fmtTime).join(', ')}`);
+    const cause = parts.length ? parts.join(', and ') : `the longest stretch of steady signal was ${Math.round(longest)} seconds`;
     issues.push({
       code: 'motion', severity: 'fail',
-      problem: g.motionIntervals.length
-        ? `Movement disturbed the signal at ${g.motionIntervals.map(fmtTime).join(', ')}, leaving no ${T.minCleanSec}-second stretch of steady signal.`
-        : `The longest stretch of steady signal was ${Math.round(longest)} seconds; ${T.minCleanSec} are needed.`,
-      fix: 'Rest your hand and phone on a table, keep your finger still and relaxed, and try again.',
-      intervals: g.motionIntervals,
+      problem: `${cause.charAt(0).toUpperCase()}${cause.slice(1)}, so there was no ${T.minCleanSec}-second stretch of steady signal to analyse.`,
+      fix: g.frameIntervals.length
+        ? 'Keep your fingertip resting on the camera for the whole recording. Rest your hand and phone on a table so you can relax your finger without lifting it.'
+        : 'Rest your hand and phone on a table, keep your finger still and relaxed, and try again.',
+      intervals: [...g.frameIntervals, ...g.motionIntervals].sort((a, b) => a.start - b.start),
     });
   }
   if (!issues.some((i) => i.severity === 'fail') &&
