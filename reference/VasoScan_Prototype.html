@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VascuScan — Vascular Screening System</title>
+<style>
+  :root{
+    --bg:#EAEEF2; --surface:#FFFFFF; --surface2:#F6F8FA;
+    --line:#D7DEE6; --line2:#E7ECF1;
+    --navy:#163A5E; --navy2:#1E5183;
+    --ink:#1B2530; --muted:#5A6B7B; --faint:#8593A2;
+    --green:#2E7D52; --green-bg:#E8F2EC;
+    --amber:#9A6209; --amber-bg:#FAF0DC;
+    --red:#B23A2C; --red-bg:#F8E8E4;
+    --dop:#1E5F86; --ppg:#3F7E55;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Inter",Roboto,"Helvetica Neue",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:13.5px; line-height:1.45;
+    -webkit-font-smoothing:antialiased; font-variant-numeric:tabular-nums; padding:18px;
+    display:flex; justify-content:center;}
+  .num{font-variant-numeric:tabular-nums}
+  .app{width:100%; max-width:1280px}
+
+  /* ---------- header ---------- */
+  .appbar{background:var(--navy); color:#fff; border-radius:8px 8px 0 0; padding:11px 18px;
+    display:flex; align-items:center; justify-content:space-between; gap:18px; flex-wrap:wrap}
+  .appbar .left{display:flex; align-items:center; gap:14px}
+  .logo{display:flex; align-items:center; gap:9px; font-weight:700; font-size:17px; letter-spacing:.2px}
+  .logo .pulse{width:22px;height:22px;flex:0 0 auto}
+  .sys{font-size:12px; color:#AFc4d8; border-left:1px solid #335a7d; padding-left:14px; letter-spacing:.2px}
+  .badge{font-size:10.5px; letter-spacing:.6px; text-transform:uppercase; background:#0e2a45; color:#cfe0ee;
+    border:1px solid #2c5377; border-radius:4px; padding:3px 8px}
+  .study{display:flex; gap:10px}
+  .study .f{background:#10304d; border:1px solid #2c5377; border-radius:6px; padding:5px 10px; min-width:120px}
+  .study label{display:block; font-size:9px; letter-spacing:1.2px; text-transform:uppercase; color:#7fa0bd; margin-bottom:1px}
+  .study input{background:transparent;border:0;color:#fff;font-family:var(--sans);font-size:13px;width:100%;outline:none;font-variant-numeric:tabular-nums}
+
+  /* ---------- patient banner ---------- */
+  .banner{background:var(--surface); border-left:1px solid var(--line); border-right:1px solid var(--line);
+    border-bottom:1px solid var(--line); padding:12px 18px; display:flex; gap:30px; flex-wrap:wrap}
+  .banner .bf{min-width:90px}
+  .banner .bk{font-size:10px; letter-spacing:.7px; text-transform:uppercase; color:var(--faint); margin-bottom:2px}
+  .banner .bv{font-size:14px; font-weight:600; color:var(--ink)}
+  .banner .bv.dim{color:var(--faint); font-weight:500}
+
+  /* ---------- workspace ---------- */
+  .grid{display:grid; grid-template-columns:248px 1fr 326px; gap:14px; margin-top:14px}
+  .panel{background:var(--surface); border:1px solid var(--line); border-radius:8px}
+  .ph{padding:11px 15px; border-bottom:1px solid var(--line2); font-size:11px; letter-spacing:1px;
+    text-transform:uppercase; color:var(--muted); font-weight:600; display:flex; justify-content:space-between; align-items:center}
+  .pb{padding:15px}
+
+  /* worklist */
+  .wl{display:flex; flex-direction:column}
+  .wlrow{text-align:left; background:transparent; border:0; border-bottom:1px solid var(--line2); padding:11px 15px;
+    cursor:pointer; display:flex; flex-direction:column; gap:2px}
+  .wlrow:hover{background:var(--surface2)}
+  .wlrow.sel{background:#EAF1F7; box-shadow:inset 3px 0 0 var(--navy2)}
+  .wlrow .mrn{font-size:13px; font-weight:600; color:var(--ink)}
+  .wlrow .meta{font-size:11.5px; color:var(--muted)}
+
+  /* acquisition */
+  .field{margin-bottom:13px}
+  .flabel{font-size:11px; color:var(--muted); margin-bottom:6px; font-weight:600}
+  .seg{display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden}
+  .seg button{flex:1; background:var(--surface); border:0; border-right:1px solid var(--line); color:var(--muted);
+    padding:8px 0; font-size:12px; cursor:pointer; font-family:var(--sans)}
+  .seg button:last-child{border-right:0}
+  .seg button.sel{background:var(--navy); color:#fff; font-weight:600}
+  .acq{width:100%; background:var(--navy); color:#fff; border:0; border-radius:6px; padding:11px; font-size:14px;
+    font-weight:600; cursor:pointer; font-family:var(--sans)}
+  .acq:hover{background:var(--navy2)}
+  .acq:disabled{background:#aeb9c4; cursor:default}
+  .qrow{display:flex; align-items:center; gap:10px; margin-top:13px}
+  .qbar{flex:1; height:6px; background:var(--line2); border-radius:3px; overflow:hidden}
+  .qfill{height:100%; width:0%; background:var(--navy2); transition:width .15s}
+  .qtxt{font-size:11.5px; color:var(--muted); min-width:96px; text-align:right}
+  .stat{margin-top:10px; font-size:11.5px; color:var(--muted); min-height:16px}
+
+  /* waveforms */
+  .lane{padding:6px 12px 2px}
+  .lane:first-child{border-bottom:1px solid var(--line2)}
+  .lane .lh{display:flex; justify-content:space-between; font-size:11px; color:var(--muted); padding:4px 2px 2px}
+  .lane .lh .u{color:var(--faint)}
+  canvas{display:block; width:100%; height:150px}
+  .scale{display:flex; justify-content:space-between; font-size:10px; color:var(--faint); padding:0 4px 8px}
+
+  /* measurements table */
+  table{width:100%; border-collapse:collapse}
+  thead th{text-align:left; font-size:10.5px; letter-spacing:.6px; text-transform:uppercase; color:var(--faint);
+    font-weight:600; padding:9px 15px; border-bottom:1px solid var(--line)}
+  thead th.r,tbody td.r{text-align:right}
+  tbody td{padding:10px 15px; border-bottom:1px solid var(--line2); font-size:13px}
+  tbody tr:last-child td{border-bottom:0}
+  td.param{color:var(--ink)}
+  td.val{font-weight:600}
+  td.ref{color:var(--muted); font-size:12px}
+  .flag{display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; padding:2px 9px;
+    border-radius:11px; white-space:nowrap}
+  .flag.n{color:var(--green); background:var(--green-bg)}
+  .flag.w{color:var(--amber); background:var(--amber-bg)}
+  .flag.c{color:var(--red); background:var(--red-bg)}
+
+  /* assessment */
+  .asmt .cat{display:inline-block; font-size:12px; font-weight:700; letter-spacing:.5px; padding:4px 12px;
+    border-radius:5px; margin-bottom:14px}
+  .prob{display:flex; align-items:baseline; gap:9px}
+  .prob .big{font-size:34px; font-weight:700; line-height:1}
+  .prob .ci{font-size:12.5px; color:var(--muted)}
+  .problabel{font-size:11.5px; color:var(--muted); margin-top:2px}
+  .riskbar{margin:16px 0 6px; position:relative}
+  .riskseg{display:flex; height:14px; border-radius:4px; overflow:hidden; border:1px solid var(--line)}
+  .riskseg .s{height:100%}
+  .ticks{display:flex; justify-content:space-between; font-size:10px; color:var(--faint); margin-top:5px}
+  .marker{position:absolute; top:-5px; width:2px; height:24px; background:var(--ink); transform:translateX(-1px)}
+  .marker::after{content:""; position:absolute; top:-5px; left:-4px; border-left:5px solid transparent;
+    border-right:5px solid transparent; border-top:6px solid var(--ink)}
+  .ciwhisk{position:absolute; top:18px; height:5px; border-left:1px solid var(--muted); border-right:1px solid var(--muted);
+    border-bottom:1px solid var(--muted)}
+  .interp{margin-top:16px; font-size:13px; line-height:1.5; color:var(--ink)}
+  .contrib{margin-top:12px}
+  .contrib .ct{font-size:10.5px; letter-spacing:.6px; text-transform:uppercase; color:var(--faint); margin-bottom:6px}
+  .contrib ul{margin:0; padding-left:17px; font-size:12.5px; color:var(--muted)}
+  .contrib li{margin-bottom:3px}
+  .modelnote{margin-top:13px; padding-top:11px; border-top:1px solid var(--line2); font-size:11px; color:var(--faint)}
+
+  /* recommendation */
+  .rec{border-left:4px solid var(--navy2); background:var(--surface2); border-radius:6px; padding:13px 15px}
+  .rec .rl{font-size:10.5px; letter-spacing:.7px; text-transform:uppercase; color:var(--faint); margin-bottom:5px}
+  .rec .rt{font-size:14px; font-weight:600; color:var(--ink); line-height:1.45}
+  .rec .rs{font-size:12.5px; color:var(--muted); margin-top:5px}
+
+  .empty{padding:34px 15px; text-align:center; color:var(--faint); font-size:13px; line-height:1.6}
+  .foot{margin-top:14px; padding:10px 4px; font-size:11px; color:var(--faint); text-align:center; line-height:1.6}
+  .stack>*+*{margin-top:14px}
+
+  @media (max-width:1040px){ .grid{grid-template-columns:1fr} }
+  @media (prefers-reduced-motion:reduce){ *{transition:none!important} }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- header -->
+  <div class="appbar">
+    <div class="left">
+      <span class="logo">
+        <svg class="pulse" viewBox="0 0 28 28" fill="none"><path d="M1 14h6l2-7 4 14 3-9 2 4h9" stroke="#7FB2D8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        VascuScan
+      </span>
+      <span class="sys">Vascular Screening System &nbsp;·&nbsp; v0.9</span>
+      <span class="badge">Investigational</span>
+    </div>
+    <div class="study">
+      <div class="f"><label>Team ID</label><input id="tid" value="____" spellcheck="false"></div>
+      <div class="f"><label>Team Name</label><input id="tname" value="Team LGS Defence X" spellcheck="false"></div>
+    </div>
+  </div>
+
+  <!-- patient banner -->
+  <div class="banner" id="banner">
+    <div class="bf"><div class="bk">Patient</div><div class="bv dim" id="bPatient">No patient selected</div></div>
+    <div class="bf"><div class="bk">Age / Sex</div><div class="bv dim" id="bAge">—</div></div>
+    <div class="bf"><div class="bk">Indication</div><div class="bv dim" id="bInd">—</div></div>
+    <div class="bf"><div class="bk">Scan site</div><div class="bv" id="bSite">Carotid</div></div>
+    <div class="bf"><div class="bk">Operator</div><div class="bv dim" id="bOp">LHW field unit</div></div>
+    <div class="bf"><div class="bk">Acquired</div><div class="bv dim" id="bTime">—</div></div>
+  </div>
+
+  <!-- workspace -->
+  <div class="grid">
+    <!-- column A -->
+    <div class="stack">
+      <div class="panel">
+        <div class="ph">Worklist</div>
+        <div class="wl" id="worklist"></div>
+      </div>
+      <div class="panel">
+        <div class="ph">Acquisition</div>
+        <div class="pb">
+          <div class="field">
+            <div class="flabel">Scan site</div>
+            <div class="seg" id="sites"></div>
+          </div>
+          <button class="acq" id="acqBtn" disabled>Select a patient</button>
+          <div class="qrow">
+            <span class="qtxt num" id="timer">0.0 / 10.0 s</span>
+            <div class="qbar"><div class="qfill" id="qfill"></div></div>
+          </div>
+          <div class="stat" id="quality">Signal quality: —</div>
+          <div class="stat" id="status"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- column B -->
+    <div class="stack">
+      <div class="panel">
+        <div class="ph">Waveform acquisition</div>
+        <div class="lane">
+          <div class="lh"><span>Doppler velocity envelope</span><span class="u">cm/s</span></div>
+          <canvas id="cD"></canvas>
+          <div class="scale"><span>0 s</span><span>10 s</span></div>
+        </div>
+        <div class="lane">
+          <div class="lh"><span>Photoplethysmography (PPG)</span><span class="u">a.u.</span></div>
+          <canvas id="cP"></canvas>
+          <div class="scale"><span>0 s</span><span>10 s</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="ph">Measurements <span style="text-transform:none;letter-spacing:0;font-weight:500;color:var(--faint)" id="measNote">awaiting acquisition</span></div>
+        <div id="measWrap">
+          <div class="empty">Run an acquisition to extract vascular measurements.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- column C -->
+    <div class="stack">
+      <div class="panel">
+        <div class="ph">Clinical assessment</div>
+        <div class="pb asmt" id="assess">
+          <div class="empty">No assessment yet.</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="ph">Recommended next action</div>
+        <div class="pb" id="recoWrap">
+          <div class="empty">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Investigational device — for research use only. Not for diagnostic use. &nbsp;·&nbsp; Prototype runs on representative signals; production model: 1D-CNN trained on clinical data.</div>
+</div>
+
+<script>
+(function(){
+"use strict";
+const $=s=>document.querySelector(s);
+const reduce=window.matchMedia&&matchMedia("(prefers-reduced-motion:reduce)").matches;
+const N=1024, HF_LOW=18;
+
+const PATIENTS=[
+  {id:"a",mrn:"MRN 4821",age:58,sex:"M",ind:"Routine screening",sev:0.15},
+  {id:"b",mrn:"MRN 5093",age:64,sex:"M",ind:"Intermittent claudication",sev:0.50},
+  {id:"c",mrn:"MRN 5277",age:71,sex:"M",ind:"Diabetic foot, pulse check",sev:0.85},
+];
+const SITES=["Carotid","Brachial","Ankle"];
+let state={patient:null, site:"Carotid", busy:false};
+
+/* ---------- signal generators ---------- */
+function dopHealthy(t){const c=(t*2.4)%1;return c<0.5?Math.pow(Math.max(0,Math.sin(Math.PI*c/0.5)),1.6)*0.85:0;}
+function dopTurb(t){const env=0.55+0.45*Math.max(0,Math.sin(2*Math.PI*(t*2.4)));
+  const n=0.5*Math.sin(48*t)+0.3*Math.sin(81*t+1)+0.22*Math.sin(127*t+2)+0.15*Math.sin(199*t+0.5);return env*n*1.05;}
+const PPG_H=[[0,-0.55],[0.08,-0.5],[0.16,0.95],[0.28,0.35],[0.40,0.05],[0.46,-0.02],[0.52,0.18],[0.60,0.05],[0.80,-0.45],[1.0,-0.55]];
+const PPG_B=[[0,-0.45],[0.18,-0.35],[0.40,0.30],[0.62,0.10],[0.85,-0.38],[1.0,-0.45]];
+function kf(a,t){for(let i=0;i<a.length-1;i++){const[p0,v0]=a[i],[p1,v1]=a[i+1];if(t>=p0&&t<=p1){const r=p1>p0?(t-p0)/(p1-p0):0;return v0+(v1-v0)*r;}}return a[a.length-1][1];}
+function generate(sev){const d=new Float64Array(N),p=new Float64Array(N);
+  for(let i=0;i<N;i++){const t=i/N;
+    d[i]=(1-sev)*dopHealthy(t)+sev*dopTurb(t)+(Math.random()-0.5)*0.02;
+    p[i]=(1-sev)*kf(PPG_H,(t*2.2)%1)+sev*kf(PPG_B,(t*2.2)%1)+(Math.random()-0.5)*0.012;}
+  return {d,p};}
+
+/* ---------- DSP ---------- */
+function fft(re,im,n){
+  for(let i=1,j=0;i<n;i++){let bit=n>>1;for(;j&bit;bit>>=1)j^=bit;j^=bit;
+    if(i<j){const tr=re[i];re[i]=re[j];re[j]=tr;const ti=im[i];im[i]=im[j];im[j]=ti;}}
+  for(let len=2;len<=n;len<<=1){const ang=-2*Math.PI/len,wr=Math.cos(ang),wi=Math.sin(ang);
+    for(let i=0;i<n;i+=len){let cwr=1,cwi=0;
+      for(let k=0;k<len/2;k++){const ar=re[i+k],ai=im[i+k];
+        const br=re[i+k+len/2]*cwr-im[i+k+len/2]*cwi,bi=re[i+k+len/2]*cwi+im[i+k+len/2]*cwr;
+        re[i+k]=ar+br;im[i+k]=ai+bi;re[i+k+len/2]=ar-br;im[i+k+len/2]=ai-bi;
+        const t=cwr*wr-cwi*wi;cwi=cwr*wi+cwi*wr;cwr=t;}}}
+}
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const sigmoid=x=>1/(1+Math.exp(-x));
+
+function features(sig){
+  const re=Float64Array.from(sig.d),im=new Float64Array(N);
+  let mean=0;for(let i=0;i<N;i++)mean+=re[i];mean/=N;for(let i=0;i<N;i++)re[i]-=mean;
+  fft(re,im,N);
+  let sumAll=0,sumHF=0;for(let k=1;k<N/2;k++){const m=Math.hypot(re[k],im[k]);sumAll+=m;if(k>=HF_LOW)sumHF+=m;}
+  const hf=sumAll>0?sumHF/sumAll:0;
+  const bb=clamp((hf-0.25)/0.25,0,1);
+  const psv=Math.round(60+bb*255);
+  const p=sig.p,cyc=Math.round(N/2.2);
+  let foot=0,fmin=Infinity;for(let i=0;i<cyc;i++)if(p[i]<fmin){fmin=p[i];foot=i;}
+  let peak=foot,pmax=-Infinity;for(let i=foot;i<foot+cyc&&i<N;i++)if(p[i]>pmax){pmax=p[i];peak=i;}
+  const riseFrac=(peak-foot)/cyc, riseMs=Math.round(riseFrac*800), riseN=clamp((riseFrac-0.16)/0.24,0,1);
+  let range=pmax-fmin, trough=pmax,ti=peak;
+  for(let i=peak;i<peak+0.30*cyc&&i<N;i++)if(p[i]<trough){trough=p[i];ti=i;}
+  let sec=-Infinity;for(let i=ti;i<peak+0.55*cyc&&i<N;i++)if(p[i]>sec)sec=p[i];
+  const notch=(sec-trough>0.05*range), notchAbsent=notch?0:1;
+  const pi=+(1.25-0.85*bb).toFixed(2);
+  const logit=-2.5+5.8*bb+0.4*riseN+0.5*notchAbsent;
+  const risk=Math.round(sigmoid(logit)*100);
+  return {bb,psv,riseMs,notch,pi,risk};
+}
+
+/* ---------- canvas (clinical strip-chart) ---------- */
+const cD=$("#cD"),cP=$("#cP"),ctxD=cD.getContext("2d"),ctxP=cP.getContext("2d");
+let DIM={};
+function fit(c){const dpr=Math.min(2,window.devicePixelRatio||1),w=c.clientWidth,h=c.clientHeight;
+  c.width=w*dpr;c.height=h*dpr;c.getContext("2d").setTransform(dpr,0,0,dpr,0,0);return {w,h};}
+function fitAll(){DIM.d=fit(cD);DIM.p=fit(cP);}
+window.addEventListener("resize",()=>{fitAll();drawStatic();});
+
+function grid(ctx,w,h){
+  ctx.fillStyle="#FFFFFF";ctx.fillRect(0,0,w,h);
+  const step=Math.max(12,Math.round(w/42));
+  ctx.strokeStyle="#EFF3F7";ctx.lineWidth=1;
+  for(let x=0;x<=w;x+=step){ctx.beginPath();ctx.moveTo(x+.5,0);ctx.lineTo(x+.5,h);ctx.stroke();}
+  for(let y=0;y<=h;y+=step){ctx.beginPath();ctx.moveTo(0,y+.5);ctx.lineTo(w,y+.5);ctx.stroke();}
+  ctx.strokeStyle="#E1E8EF";
+  for(let x=0;x<=w;x+=step*5){ctx.beginPath();ctx.moveTo(x+.5,0);ctx.lineTo(x+.5,h);ctx.stroke();}
+  for(let y=0;y<=h;y+=step*5){ctx.beginPath();ctx.moveTo(0,y+.5);ctx.lineTo(w,y+.5);ctx.stroke();}
+  ctx.strokeStyle="#D2DAE2";ctx.beginPath();ctx.moveTo(0,h*0.52+.5);ctx.lineTo(w,h*0.52+.5);ctx.stroke();
+}
+function trace(ctx,dim,arr,upto,color,fill){
+  const {w,h}=dim,mid=h*0.52,amp=h*0.40,lim=Math.max(2,Math.floor(upto*arr.length));
+  if(fill){ctx.beginPath();ctx.moveTo(0,mid);
+    for(let i=0;i<lim;i++){const x=i/(arr.length-1)*w,y=mid-clamp(arr[i],-1.2,1.2)*amp;ctx.lineTo(x,y);}
+    ctx.lineTo((lim-1)/(arr.length-1)*w,mid);ctx.closePath();
+    ctx.fillStyle="rgba(30,95,134,.08)";ctx.fill();}
+  ctx.strokeStyle=color;ctx.lineWidth=1.6;ctx.lineJoin="round";ctx.lineCap="round";ctx.beginPath();
+  for(let i=0;i<lim;i++){const x=i/(arr.length-1)*w,y=mid-clamp(arr[i],-1.2,1.2)*amp;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+  ctx.stroke();
+  if(upto<1){const cx=upto*w;ctx.strokeStyle="rgba(60,90,120,.35)";ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(cx,0);ctx.lineTo(cx,h);ctx.stroke();}
+}
+let CUR=null;
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+function drawStatic(){grid(ctxD,DIM.d.w,DIM.d.h);grid(ctxP,DIM.p.w,DIM.p.h);
+  if(CUR){trace(ctxD,DIM.d,CUR.d,1,css("--dop"),true);trace(ctxP,DIM.p,CUR.p,1,css("--ppg"),false);}}
+
+/* ---------- UI ---------- */
+function buildWorklist(){const wl=$("#worklist");wl.innerHTML="";
+  PATIENTS.forEach(pt=>{const b=document.createElement("button");
+    b.className="wlrow"+(state.patient&&state.patient.id===pt.id?" sel":"");
+    b.innerHTML=`<span class="mrn">${pt.mrn}</span><span class="meta">${pt.age} ${pt.sex} · ${pt.ind}</span>`;
+    b.onclick=()=>{if(state.busy)return;selectPatient(pt);};wl.appendChild(b);});}
+function buildSites(){const sc=$("#sites");sc.innerHTML="";
+  SITES.forEach(s=>{const b=document.createElement("button");b.textContent=s;if(s===state.site)b.className="sel";
+    b.onclick=()=>{if(state.busy)return;state.site=s;$("#bSite").textContent=s;buildSites();};sc.appendChild(b);});}
+function selectPatient(pt){
+  state.patient=pt; buildWorklist();
+  $("#bPatient").textContent=pt.mrn; $("#bPatient").classList.remove("dim");
+  $("#bAge").textContent=pt.age+" / "+pt.sex; $("#bAge").classList.remove("dim");
+  $("#bInd").textContent=pt.ind; $("#bInd").classList.remove("dim");
+  $("#bTime").textContent="—"; $("#bTime").classList.add("dim");
+  $("#acqBtn").disabled=false; $("#acqBtn").textContent="Acquire 10 s";
+  resetOutputs();
+}
+function resetOutputs(){
+  CUR=null; drawStatic();
+  $("#qfill").style.width="0%"; $("#timer").textContent="0.0 / 10.0 s";
+  $("#quality").textContent="Signal quality: —"; $("#status").textContent="";
+  $("#measNote").textContent="awaiting acquisition";
+  $("#measWrap").innerHTML='<div class="empty">Run an acquisition to extract vascular measurements.</div>';
+  $("#assess").innerHTML='<div class="empty">No assessment yet.</div>';
+  $("#recoWrap").innerHTML='<div class="empty">—</div>';
+}
+const sleep=ms=>new Promise(r=>setTimeout(r,reduce?Math.min(ms,60):ms));
+
+/* ---------- acquisition flow ---------- */
+async function acquire(){
+  if(state.busy||!state.patient)return; state.busy=true;
+  $("#acqBtn").disabled=true; $("#acqBtn").textContent="Acquiring…";
+  $("#quality").textContent="Signal quality: acquiring…"; $("#status").textContent="";
+  $("#measWrap").innerHTML='<div class="empty">Acquiring…</div>';
+  $("#assess").innerHTML='<div class="empty">Acquiring…</div>';
+  CUR=generate(state.patient.sev);
+
+  await capture();
+  $("#quality").textContent="Signal quality: Good · motion "+(2+Math.floor(Math.random()*3))+"%";
+  const steps=["Band-pass filtering","Spectral analysis (FFT)","Feature extraction","Classification"];
+  for(const s of steps){$("#status").textContent=s+"…"; await sleep(420);}
+  $("#status").textContent="Analysis complete.";
+  const f=features(CUR);
+  $("#bTime").textContent=new Date().toLocaleString([], {year:"numeric",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+  $("#bTime").classList.remove("dim");
+  renderMeasurements(f); renderAssessment(f); renderReco(f);
+  $("#acqBtn").disabled=false; $("#acqBtn").textContent="Re-acquire";
+  state.busy=false;
+}
+function capture(){return new Promise(res=>{
+  const DUR=reduce?180:4200,t0=performance.now();
+  $("#status").textContent="Capturing 10 s window…";
+  (function frame(now){const p=clamp((now-t0)/DUR,0,1);
+    grid(ctxD,DIM.d.w,DIM.d.h);grid(ctxP,DIM.p.w,DIM.p.h);
+    trace(ctxD,DIM.d,CUR.d,p,css("--dop"),true);trace(ctxP,DIM.p,CUR.p,p,css("--ppg"),false);
+    $("#timer").textContent=(p*10).toFixed(1)+" / 10.0 s"; $("#qfill").style.width=Math.round(p*100)+"%";
+    if(p<1)requestAnimationFrame(frame); else res();})(t0);
+});}
+
+/* ---------- clinical flag logic ---------- */
+function flag(level){return level===0?{cls:"n",txt:"Normal"}:level===1?{cls:"w",txt:"Borderline"}:{cls:"c",txt:"Abnormal"};}
+function fcell(f){return `<span class="flag ${f.cls}">${f.cls==="n"?"●":f.cls==="w"?"▲":"▲▲"} ${f.txt}</span>`;}
+
+function renderMeasurements(f){
+  const psvL=f.psv<125?0:f.psv<=230?1:2;
+  const sbL=f.bb*100<30?0:f.bb*100<=50?1:2;
+  const ctL=f.riseMs<180?0:f.riseMs<=250?1:2;
+  const piL=f.pi>=0.9?0:f.pi>=0.7?1:2;
+  const notchL=f.notch?0:2;
+  const rows=[
+    ["Peak systolic velocity (PSV)", f.psv+" cm/s", "&lt; 125 cm/s", psvL],
+    ["Spectral broadening", Math.round(f.bb*100)+" %", "&lt; 30 %", sbL],
+    ["PPG crest (rise) time", f.riseMs+" ms", "&lt; 180 ms", ctL],
+    ["Pulsatility index (PI)", f.pi.toFixed(2), "0.90 – 1.30", piL],
+    ["Dicrotic notch", f.notch?"Present":"Absent", "Present", notchL],
+  ];
+  $("#measNote").textContent="carotid / peripheral criteria";
+  $("#measWrap").innerHTML=`<table><thead><tr>
+    <th>Parameter</th><th class="r">Result</th><th class="r">Reference</th><th class="r">Status</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr>
+      <td class="param">${r[0]}</td>
+      <td class="r val">${r[1]}</td>
+      <td class="r ref">${r[2]}</td>
+      <td class="r">${fcell(flag(r[3]))}</td></tr>`).join("")}</tbody></table>`;
+}
+
+function bandOf(r){return r<30?{n:"LOW RISK",col:"--green",bg:"--green-bg",grade:"low likelihood of significant stenosis"}
+  :r<70?{n:"MODERATE RISK",col:"--amber",bg:"--amber-bg",grade:"findings suggestive of moderate (50–69%) stenosis"}
+  :{n:"HIGH RISK",col:"--red",bg:"--red-bg",grade:"findings consistent with severe (≥70%) stenosis"};}
+
+function renderAssessment(f){
+  const b=bandOf(f.risk), lo=Math.max(0,f.risk-7), hi=Math.min(100,f.risk+7);
+  const contributors=[];
+  if(f.psv>=125)contributors.push("Elevated peak systolic velocity ("+f.psv+" cm/s)");
+  if(f.bb*100>=30)contributors.push("Increased spectral broadening ("+Math.round(f.bb*100)+"%)");
+  if(!f.notch)contributors.push("Loss of dicrotic notch on PPG");
+  if(f.riseMs>=180)contributors.push("Prolonged PPG crest time ("+f.riseMs+" ms)");
+  if(f.pi<0.9)contributors.push("Reduced pulsatility index ("+f.pi.toFixed(2)+")");
+  if(!contributors.length)contributors.push("All measured parameters within reference range");
+  $("#assess").innerHTML=`
+    <div class="cat" style="color:${css(b.col)};background:${css(b.bg)}">${b.n}</div>
+    <div class="prob"><span class="big" style="color:${css(b.col)}">${f.risk}%</span>
+      <span class="ci">95% CI ${lo}–${hi}%</span></div>
+    <div class="problabel">Estimated probability of significant stenosis</div>
+    <div class="riskbar">
+      <div class="riskseg">
+        <div class="s" style="width:30%;background:${css('--green-bg')}"></div>
+        <div class="s" style="width:40%;background:${css('--amber-bg')}"></div>
+        <div class="s" style="width:30%;background:${css('--red-bg')}"></div>
+      </div>
+      <div class="ciwhisk" style="left:${lo}%;width:${hi-lo}%"></div>
+      <div class="marker" style="left:${f.risk}%"></div>
+      <div class="ticks"><span>Low</span><span>Moderate</span><span>High</span></div>
+    </div>
+    <div class="interp"><strong>Interpretation.</strong> Automated screening indicates ${b.grade} at the ${state.site.toLowerCase()} site.</div>
+    <div class="contrib"><div class="ct">Key contributors</div><ul>${contributors.slice(0,3).map(c=>`<li>${c}</li>`).join("")}</ul></div>
+    <div class="modelnote">VascuScan classifier v0.9 · dual-channel (Doppler + PPG) · representative-signal demo</div>`;
+}
+
+function renderReco(f){
+  const r=f.risk;
+  const data=r<30?{c:"--green",l:"Routine surveillance",t:"No urgent action. Continue routine screening.",s:"Re-screen at the next scheduled visit."}
+    :r<70?{c:"--amber",l:"Further assessment",t:"Refer for confirmatory duplex ultrasound within 2 weeks.",s:"Notify supervising clinician; document indication and site."}
+    :{c:"--red",l:"Urgent referral",t:"Refer for vascular imaging today.",s:"Notify on-call vascular service. Do not delay."};
+  $("#recoWrap").innerHTML=`<div class="rec" style="border-left-color:${css(data.c)}">
+    <div class="rl">${data.l}</div><div class="rt">${data.t}</div><div class="rs">${data.s}</div></div>`;
+}
+
+function init(){buildWorklist();buildSites();fitAll();drawStatic();$("#acqBtn").addEventListener("click",acquire);}
+if(document.readyState!=="loading")init();else document.addEventListener("DOMContentLoaded",init);
+})();
+</script>
+</body>
+</html>
