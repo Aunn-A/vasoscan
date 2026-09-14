@@ -8,7 +8,7 @@ import { timelineChart } from '../charts/timeline';
 import { intervalsChart } from '../charts/intervals';
 import { heartbeatPlate } from '../charts/heartbeat';
 import { stiffnessScale } from '../charts/scale';
-import { apgChart, ensembleChart, rawChart, signalChart, spectrumChart } from '../charts/technical';
+import { apgChart, ensembleChart, poincareChart, rawChart, signalChart, spectrumChart } from '../charts/technical';
 import { classifyFrame } from '../../quality/frame';
 import { SYNTH_CASES } from '../../sim/ppgSynth';
 
@@ -24,8 +24,10 @@ export function renderResults(main: HTMLElement, ctx: Ctx): void {
   const page = h('div', { class: 'wrap results' });
   main.append(h('section', { class: 'page results-page' }, page));
 
+  page.append(reportHeader(r));
   page.append(provenance(r));
   page.append(summaryHeader(r, sum.usable, sum.verdict, sum.sentence));
+  if (sum.usable) main.prepend(sectionNav(findings));
 
   if (!sum.usable) {
     page.append(failurePanel(r, ctx));
@@ -44,6 +46,43 @@ export function renderResults(main: HTMLElement, ctx: Ctx): void {
   page.append(actionsRow(ctx, simulated));
 }
 
+function recordingCode(r: AnalysisResult): string {
+  let x = 0;
+  for (const ch of r.analysedAt) x = (x * 31 + ch.charCodeAt(0)) >>> 0;
+  return x.toString(16).toUpperCase().padStart(8, '0').slice(-6);
+}
+
+function reportHeader(r: AnalysisResult): HTMLElement {
+  const dur = r.pre ? Math.round(r.pre.ppg.length / r.pre.fs + r.analysisOffsetSec) : 0;
+  const when = new Date(r.analysedAt);
+  const item = (k: string, v: string) => h('div', {}, h('dt', {}, k), h('dd', {}, v));
+  return h('dl', { class: 'report-head' },
+    item('Recording', recordingCode(r)),
+    item('Date', when.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })),
+    item('Time', when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
+    item('Length', `${dur} s`),
+    item('Source', r.provenance.kind === 'simulated' ? 'Simulation' : 'Phone camera'),
+  );
+}
+
+function sectionNav(findings: Finding[]): HTMLElement {
+  const items: Array<[string, string]> = [['summary-anchor', 'Summary'], ...findings.map((f) => [`finding-${f.id}`, ({ quality: 'Quality', rate: 'Heart rate', shape: 'Pulse shape', stiffness: 'Indicator' } as Record<string, string>)[f.id]] as [string, string]), ['evidence', 'Evidence']];
+  const links = items.map(([id, label]) => h('a', { href: `#${id}`, 'data-target': id, onclick: (e: Event) => { e.preventDefault(); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, label));
+  const nav = h('nav', { class: 'section-nav', 'aria-label': 'Result sections' }, h('div', { class: 'wrap' }, ...links));
+  queueMicrotask(() => {
+    if (typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        links.forEach((a) => a.classList.toggle('active', a.dataset.target === (e.target as HTMLElement).id));
+        links.find((a) => a.classList.contains('active'))?.scrollIntoView({ block: 'nearest', inline: 'center' });
+      }
+    }, { rootMargin: '-45% 0px -50% 0px' });
+    items.forEach(([id]) => { const el = document.getElementById(id); if (el) io.observe(el); });
+  });
+  return nav;
+}
+
 function provenance(r: AnalysisResult): HTMLElement {
   if (r.provenance.kind === 'simulated') {
     const c = SYNTH_CASES.find((x) => x.id === (r.provenance as { caseId: string }).caseId);
@@ -58,7 +97,7 @@ function provenance(r: AnalysisResult): HTMLElement {
 
 function summaryHeader(r: AnalysisResult, usable: boolean, verdict: string, sentence: string): HTMLElement {
   const level = usable ? (r.quality!.issues.some((i) => i.severity === 'warn') ? 'fair' : 'good') : 'poor';
-  const head = h('header', { class: `summary ${usable ? 'ok' : 'fail'}` },
+  const head = h('header', { class: `summary ${usable ? 'ok' : 'fail'}`, id: 'summary-anchor' },
     h('div', { class: 'summary-verdict' },
       h('span', { class: `verdict-icon ${level}` }, statusIcon(level)),
       h('div', {},
@@ -71,7 +110,7 @@ function summaryHeader(r: AnalysisResult, usable: boolean, verdict: string, sent
     const pattern = shapePattern(r);
     const shapeWord = { separate: 'Two distinct waves', shoulder: 'Second wave as a shoulder', merged: 'Waves merged' }[pattern!];
     head.append(h('dl', { class: 'readouts' },
-      readout('Heart rate', String(Math.round(r.hrv.heartRateBpm)), 'beats/min', '#finding-rate'),
+      readout('Heart rate', String(Math.round(r.hrv.heartRateBpm)), 'beats/min', '#finding-rate', false, false, 60 / r.hrv.heartRateBpm),
       readout('Steady signal', String(Math.round(cleanSeconds(r))), `of ${Math.round(analysedSeconds(r))} s`, '#finding-quality'),
       readout('Pulse shape', shapeWord, '', '#finding-shape', true),
       readout('Stiffness indicator', `${r.score.band[0].toUpperCase()}${r.score.band.slice(1)} range`, '', '#finding-stiffness', true, true),
@@ -80,9 +119,9 @@ function summaryHeader(r: AnalysisResult, usable: boolean, verdict: string, sent
   return head;
 }
 
-function readout(label: string, value: string, unit: string, href: string, word = false, experimental = false): HTMLElement {
+function readout(label: string, value: string, unit: string, href: string, word = false, experimental = false, beatPeriodSec?: number): HTMLElement {
   return h('div', { class: 'readout' },
-    h('dt', {}, label),
+    h('dt', {}, label, beatPeriodSec ? h('span', { class: 'beat-dot', style: `--beat:${beatPeriodSec.toFixed(3)}s`, title: 'Pulsing at the measured heart rate', 'aria-hidden': 'true' }) : null),
     h('dd', {}, h('a', { href, onclick: (e: Event) => { e.preventDefault(); document.querySelector(href)?.scrollIntoView({ behavior: 'smooth' }); } },
       h('span', { class: word ? 'readout-word' : 'readout-num num' }, value),
       unit ? h('span', { class: 'readout-unit' }, unit) : null),
@@ -266,6 +305,13 @@ function technicalSection(r: AnalysisResult): HTMLElement {
       (w) => spectrumChart(r, w));
   }
 
+  if (r.quality?.pass && r.hrv) {
+    block('Beat-to-beat timing map', 'Poincaré plot of consecutive intervals',
+      'Each dot pairs one beat interval with the next. Dots near the dashed diagonal mean one beat was followed by a similar one. Width across the diagonal reflects beat-to-beat change; length along it reflects slower drift through the minute.',
+      'A standard way to see the pattern behind the RMSSD and SDNN numbers. It describes timing variation only and cannot identify rhythm problems.',
+      (w) => poincareChart(r, w));
+  }
+
   if (r.ensemble) {
     const e = r.ensemble;
     block('All beats and their average', 'How the average heartbeat is built',
@@ -285,7 +331,7 @@ function technicalSection(r: AnalysisResult): HTMLElement {
   block('Processing record', 'Settings and corrections for this recording', 'The technical conditions of this recording and the corrections applied.', 'Needed to reproduce the analysis or to compare recordings.', undefined, processingTable(r));
   block('Download data', 'Recording and results as files', 'The recording contains per-frame brightness values with timestamps, not video.', 'Lets the analysis be repeated or examined with other tools.', undefined, downloadButtons(r));
 
-  return h('section', { class: 'technical', 'aria-labelledby': 'tech-title' },
+  return h('section', { class: 'technical', id: 'evidence', 'aria-labelledby': 'tech-title' },
     h('h2', { id: 'tech-title', class: 'section-title' }, 'How this was measured'),
     h('p', { class: 'section-lede' }, 'The evidence behind every finding, step by step. Open any section to inspect it.'),
     h('div', { class: 'disclosures' }, ...items));

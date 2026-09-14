@@ -3,48 +3,77 @@
  * its parts named in plain language. Every marker sits on a point the analysis actually measured.
  */
 import type { AnalysisResult } from '../../pipeline';
-import { contourFromEnsemble } from '../../features/morphology';
+import { contourFromEnsemble, type Morphology } from '../../features/morphology';
 import { s } from '../dom';
 import { linePath, scale, svgRoot } from './core';
 
+/** Plate for a real analysis: the average beat plus the individual beats behind it. */
 export function heartbeatPlate(r: AnalysisResult, w: number): SVGSVGElement {
   const m = r.morphology!;
   const ens = r.ensemble!;
-  const fs = m.fs;
-  const n = m.contour.length;
-  const compact = w < 560;
-  const h = compact ? 380 : 420;
-  const left = compact ? 12 : 24, right = w - (compact ? 12 : 24);
-  const top = compact ? 64 : 70, base = h - (compact ? 100 : 104);
-  const tMax = (n / fs) * 1000;
-  const X = scale(0, tMax, left, right);
-  const Y = scale(0, 1, base, top);
-  const ms = (i: number) => (i / fs) * 1000;
-  const svg = svgRoot(w, h, describe(r));
-  svg.classList.add('plate');
-
-  // Faint individual beats, re-baselined the same way as the average
   const { offset } = contourFromEnsemble(ens);
-  const rows = ens.beats.filter((_, i) => ens.accepted[i]);
-  const stride = Math.max(1, Math.floor(rows.length / 36));
-  const faint = s('g', { class: 'plate-beats', opacity: 0.11 });
-  for (let k = 0; k < rows.length; k += stride) {
-    const row = rows[k];
+  const n = m.contour.length;
+  const rows: Float64Array[] = [];
+  const accepted = ens.beats.filter((_, i) => ens.accepted[i]);
+  const stride = Math.max(1, Math.floor(accepted.length / 36));
+  for (let k = 0; k < accepted.length; k += stride) {
+    const row = accepted[k];
     if (offset + n > row.length) continue;
     const seg = row.slice(offset, offset + n);
     const first = seg[0];
     const slope = (seg[n - 1] - first) / (n - 1);
     let peak = 0;
     for (let i = 0; i < n; i++) { seg[i] -= first + slope * i; peak = Math.max(peak, seg[i]); }
-    if (peak <= 0) continue;
-    const xs = Float64Array.from({ length: n }, (_, i) => ms(i));
-    faint.append(s('path', { d: linePath(xs, seg.map((v) => v / peak), X, Y), fill: 'none', stroke: 'var(--ink-3)', 'stroke-width': 1 }));
+    if (peak > 0) rows.push(seg.map((v) => v / peak));
+  }
+  return plateSvg(m, w, { faint: rows, label: describe(r) });
+}
+
+export interface PlateOptions {
+  faint?: Float64Array[];
+  label?: string;
+  /** Fixed time axis in ms, so an interactive plate does not rescale as the shape changes */
+  tMaxMs?: number;
+  /** A reference contour drawn dashed behind the main one, with its label */
+  ghost?: { contour: Float64Array; label: string };
+}
+
+/** Annotated heartbeat for any measured contour. */
+export function plateSvg(m: Morphology, w: number, opts: PlateOptions = {}): SVGSVGElement {
+  const fs = m.fs;
+  const n = m.contour.length;
+  const compact = w < 560;
+  const h = compact ? 380 : 420;
+  const left = compact ? 12 : 24, right = w - (compact ? 12 : 24);
+  const top = compact ? 64 : 70, base = h - (compact ? 100 : 104);
+  const tMax = opts.tMaxMs ?? (n / fs) * 1000;
+  const X = scale(0, tMax, left, right);
+  const Y = scale(0, 1, base, top);
+  const ms = (i: number) => (i / fs) * 1000;
+  const svg = svgRoot(w, h, opts.label ?? 'Annotated heartbeat');
+  svg.classList.add('plate');
+
+  const faint = s('g', { class: 'plate-beats', opacity: 0.11 });
+  for (const row of opts.faint ?? []) {
+    const xsF = Float64Array.from({ length: row.length }, (_, i) => ms(i));
+    faint.append(s('path', { d: linePath(xsF, row, X, Y), fill: 'none', stroke: 'var(--ink-3)', 'stroke-width': 1 }));
   }
   svg.append(faint);
 
+  if (opts.ghost) {
+    const g = opts.ghost.contour;
+    const xg = Float64Array.from({ length: g.length }, (_, i) => ms(i));
+    svg.append(s('path', { d: linePath(xg, g, X, Y), fill: 'none', stroke: 'var(--ink-3)', 'stroke-width': 1.6, 'stroke-dasharray': '5 5', opacity: 0.7 }));
+    let pk = 0;
+    for (let i = 1; i < g.length; i++) if (g[i] > g[pk]) pk = i;
+    const gx = X(ms(g.length - 1)) - 4;
+    svg.append(s('text', { x: Math.min(right, gx), y: top - 40, 'text-anchor': 'end', class: 'ghost-label' }, opts.ghost.label));
+    svg.append(s('line', { x1: Math.min(right, gx) - 70, x2: Math.min(right, gx) - 94, y1: top - 52 + 8, y2: top - 52 + 8, stroke: 'var(--ink-3)', 'stroke-dasharray': '5 5' }));
+  }
+
   // Baseline and time axis
   svg.append(s('line', { x1: left, x2: right, y1: base, y2: base, stroke: 'var(--line-strong)' }));
-  for (let t = 0; t <= tMax; t += 200) {
+  for (let t = 0; t <= tMax + 1e-6; t += 200) {
     svg.append(s('line', { x1: X(t), x2: X(t), y1: base, y2: base + 5, stroke: 'var(--line-strong)' }));
     if (!compact || t % 400 === 0) svg.append(s('text', { x: X(t), y: base + 19, 'text-anchor': 'middle' }, `${t} ms`));
   }

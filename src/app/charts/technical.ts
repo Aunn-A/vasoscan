@@ -136,3 +136,34 @@ export function apgChart(r: AnalysisResult, w: number): SVGSVGElement {
   for (const t of niceTicks(0, tAxis[n - 1], 5)) svg.append(s('text', { x: X(t), y: h - 4, 'text-anchor': 'middle' }, `${t} ms`));
   return svg;
 }
+
+/**
+ * Poincaré plot: each beat interval against the next one. A tight cloud on the diagonal means
+ * steady timing; spread across the diagonal is beat-to-beat change (related to RMSSD), and spread
+ * along it is slower change (related to SDNN).
+ */
+export function poincareChart(r: AnalysisResult, w: number): SVGSVGElement {
+  const iv = r.hrv!.intervals;
+  const pairs: Array<[number, number]> = [];
+  for (let i = 1; i < iv.length; i++) if (iv[i].valid && iv[i - 1].valid) pairs.push([iv[i - 1].ms, iv[i].ms]);
+  const size = Math.min(w, 420);
+  const h = size;
+  const all = pairs.flat();
+  const lo = Math.min(...all), hi = Math.max(...all);
+  const pad = Math.max(40, (hi - lo) * 0.2);
+  const a = lo - pad, b = hi + pad;
+  const left = 48, right = size - 12, top = 12, bottom = h - 36;
+  const X = scale(a, b, left, right), Y = scale(a, b, bottom, top);
+  const svg = svgRoot(size, h, `Poincaré plot of ${pairs.length} consecutive beat-interval pairs between ${Math.round(lo)} and ${Math.round(hi)} milliseconds.`);
+  for (const t of niceTicks(a, b, 4)) {
+    svg.append(s('line', { x1: X(t), x2: X(t), y1: top, y2: bottom, stroke: 'var(--line)' }));
+    svg.append(s('line', { x1: left, x2: right, y1: Y(t), y2: Y(t), stroke: 'var(--line)' }));
+    svg.append(s('text', { x: X(t), y: h - 18, 'text-anchor': 'middle' }, `${t}`));
+    svg.append(s('text', { x: left - 6, y: Y(t) + 4, 'text-anchor': 'end' }, `${t}`));
+  }
+  svg.append(s('line', { x1: X(a), y1: Y(a), x2: X(b), y2: Y(b), stroke: 'var(--ink-3)', 'stroke-dasharray': '4 4' }));
+  svg.append(s('text', { x: (left + right) / 2, y: h - 2, 'text-anchor': 'middle' }, 'this beat interval (ms)'));
+  svg.append(s('text', { x: 12, y: (top + bottom) / 2, transform: `rotate(-90 12 ${(top + bottom) / 2})`, 'text-anchor': 'middle' }, 'next beat interval (ms)'));
+  for (const [x, y] of pairs) svg.append(s('circle', { cx: X(x), cy: Y(y), r: 3.4, fill: 'var(--signal)', opacity: 0.6 }));
+  return svg;
+}
