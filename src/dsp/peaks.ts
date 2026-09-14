@@ -23,7 +23,7 @@
  *    This is the standard, noise-robust pulse-onset definition used in pulse-wave analysis.
  *  - systolic peak
  */
-import { dominantFrequency, powerSpectrum } from './fft';
+import { dominantFrequency, powerSpectrum, type Spectrum } from './fft';
 import { movingAverage } from './filters';
 import { refineExtremum, sgFirstDerivative } from './derivative';
 
@@ -45,14 +45,49 @@ export interface BeatDetection {
   refractorySec: number;
 }
 
+/**
+ * Heart-rate fundamental. The strongest spectral peak is not always the fundamental: a pulse with a
+ * pronounced second wave can put more power at twice the heart rate, and breathing-related changes
+ * can leak power to half of it. Each candidate peak is scored by the harmonic product
+ * P(f)·P(2f)·P(3f) (in logs), the standard pitch-detection approach: the true fundamental has power
+ * at all of its harmonics, while half of it has little power at 1.5 × the true rate.
+ */
+export function fundamentalFrequency(spec: Spectrum, fmin = 0.6, fmax = 3.5): number {
+  const k0 = Math.max(2, Math.ceil(fmin / spec.df));
+  const k1 = Math.min(spec.power.length - 2, Math.floor(fmax / spec.df));
+  const peaks: number[] = [];
+  for (let k = k0; k <= k1; k++) {
+    if (spec.power[k] > spec.power[k - 1] && spec.power[k] >= spec.power[k + 1]) peaks.push(k);
+  }
+  if (!peaks.length) return dominantFrequency(spec, fmin, fmax).freq;
+  const top = peaks.sort((a, b) => spec.power[b] - spec.power[a]).slice(0, 6);
+  const maxP = spec.power[top[0]];
+  const near = (f: number) => {
+    const k = Math.round(f / spec.df);
+    const w = Math.max(1, Math.round(0.04 / spec.df));
+    let m = 0;
+    for (let j = Math.max(0, k - w); j <= Math.min(spec.power.length - 1, k + w); j++) m = Math.max(m, spec.power[j]);
+    return m;
+  };
+  const floor = maxP * 1e-4;
+  let best = top[0];
+  let bestScore = -Infinity;
+  for (const k of top) {
+    // A fundamental carries real power itself; weak peaks at a fraction of the heart rate must not
+    // win by borrowing the true peak as one of their harmonics.
+    if (spec.power[k] < 0.3 * maxP) continue;
+    const f = k * spec.df;
+    const score = Math.log(Math.max(floor, spec.power[k])) + Math.log(Math.max(floor, near(2 * f))) + Math.log(Math.max(floor, near(3 * f)));
+    if (score > bestScore) { bestScore = score; best = k; }
+  }
+  return dominantFrequency(spec, best * spec.df - 0.1, best * spec.df + 0.1).freq;
+}
+
 export function detectBeats(detect: Float64Array, morph: Float64Array, fs: number): BeatDetection {
   const n = detect.length;
-  const spec = powerSpectrum(detect, fs, 16384);
-  let { freq } = dominantFrequency(spec, 0.6, 3.5);
-  // Guard against locking onto the second harmonic when the fundamental is only slightly weaker.
-  const sub = dominantFrequency(spec, Math.max(0.6, freq / 2 - 0.15), freq / 2 + 0.15);
-  const main = dominantFrequency(spec, freq - 0.05, freq + 0.05);
-  if (freq / 2 >= 0.6 && sub.power > 0.6 * main.power) freq = sub.freq;
+  // Harmonic scoring needs the harmonics, so it uses the wider morphology band; the 4 Hz detection
+  // band would suppress the 2nd and 3rd harmonics of any rate above about 80 beats/min.
+  const freq = fundamentalFrequency(powerSpectrum(morph, fs, 16384));
   const period = 1 / freq;
   const refractorySec = Math.max(0.3, 0.6 * period);
 

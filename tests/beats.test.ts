@@ -57,3 +57,23 @@ describe('beat detection on synthetic camera frames', () => {
     expect(preprocess(frames).channel).toBe('red');
   });
 });
+
+describe('fundamental frequency', () => {
+  it('does not halve the heart rate on short windows', async () => {
+    const { SYNTH_CASES: cases, synthesize: syn } = await import('../src/sim/ppgSynth');
+    const { preprocess: prep } = await import('../src/dsp/preprocess');
+    const { detectBeats: detect } = await import('../src/dsp/peaks');
+    const errors: string[] = [];
+    for (const c of cases.filter((x) => !x.artifact)) {
+      for (const hr of [55, 72, 95, 130]) {
+        for (const camera of ['ideal', 'phone'] as const) {
+          const { frames } = syn({ ...c, heartRate: hr, seed: hr }, { durationSec: 14, camera });
+          const pre = prep(frames.filter((f) => f.t > 5));
+          const { spectralHr } = detect(pre.detect, pre.morph, pre.fs);
+          if (Math.abs(spectralHr - hr) > 6) errors.push(`${c.id} ${camera} ${hr}: ${spectralHr.toFixed(0)}`);
+        }
+      }
+    }
+    expect(errors).toEqual([]);
+  });
+});

@@ -48,19 +48,19 @@ export interface SynthCase {
 // indications attached there (claudication, diabetic foot) are dropped on purpose.
 export const SYNTH_CASES: SynthCase[] = [
   {
-    id: 'a', label: 'Case A', summary: 'Compliant pulse contour: clear dicrotic notch, early crest',
+    id: 'a', label: 'Case A', summary: 'A flexible-artery pattern: early peak, and a second wave clearly separated by a notch',
     ageYears: 58, heightCm: 172, sex: 'M', heartRate: 64, rsaMs: 45, beatJitterMs: 18,
     pulse: { sysPeak: 0.15, sysK: 3, diaMu: 0.4, diaSigma: 0.07, diaAmp: 0.5 },
     perfusion: 0.012, noise: 0.25, seed: 11,
   },
   {
-    id: 'b', label: 'Case B', summary: 'Intermediate contour: shallow notch, reflected wave arriving earlier',
+    id: 'b', label: 'Case B', summary: 'An in-between pattern: a shallower notch, with the second wave arriving sooner',
     ageYears: 64, heightCm: 168, sex: 'M', heartRate: 72, rsaMs: 25, beatJitterMs: 12,
     pulse: { sysPeak: 0.15, sysK: 3, diaMu: 0.36, diaSigma: 0.07, diaAmp: 0.55 },
     perfusion: 0.009, noise: 0.25, seed: 23,
   },
   {
-    id: 'c', label: 'Case C', summary: 'Stiff contour: reflected wave returns in systole, no notch',
+    id: 'c', label: 'Case C', summary: 'A stiffer-artery pattern: the second wave has merged into the main peak',
     ageYears: 71, heightCm: 165, sex: 'M', heartRate: 78, rsaMs: 10, beatJitterMs: 8,
     pulse: { sysPeak: 0.12, sysK: 3, diaMu: 0.24, diaSigma: 0.08, diaAmp: 0.95 },
     perfusion: 0.006, noise: 0.25, seed: 37,

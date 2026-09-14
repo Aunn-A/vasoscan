@@ -47,10 +47,16 @@ export class LiveMonitor {
     if (status !== this.state.status) this.statusSince = f.t;
 
     // Display trace: causal bandpass designed for the running frame rate
-    if (!this.filter && n > 30) this.filter = new StreamingBandpass(fps, 0.5, Math.min(5, fps * 0.3));
-    this.dc = this.dc ? 0.98 * this.dc + 0.02 * f.r : f.r;
-    const rel = this.dc > 0 ? -(f.r - this.dc) / this.dc : 0;
-    const trace = this.filter ? this.filter.push(rel) : 0;
+    // Display trace: log intensity (so camera gain changes are additive steps), a clamp on sudden
+    // jumps so one glitch or exposure change does not throw the trace off screen, then a gentle
+    // causal bandpass.
+    if (!this.filter && n > 30) this.filter = new StreamingBandpass(fps, 0.6, Math.min(3.5, fps * 0.25));
+    const lr = -Math.log(Math.max(1, f.r));
+    if (this.dc === 0) this.dc = lr;
+    const step = lr - this.dc;
+    const limited = this.dc + Math.max(-0.02, Math.min(0.02, step));
+    this.dc = limited;
+    const trace = this.filter ? this.filter.push(limited) : 0;
 
     // Provisional heart rate once a second from the last 8 s of finger-present signal
     let heartRate = this.state.heartRate;
@@ -60,8 +66,13 @@ export class LiveMonitor {
       const recent = this.frames.filter((x) => f.t - x.t <= 8);
       try {
         const pre = preprocess(recent, 'red');
-        const { beats, spectralHr } = detectBeats(pre.detect, pre.morph, pre.fs);
-        heartRate = beats.length >= 4 ? spectralHr : null;
+        const { beats } = detectBeats(pre.detect, pre.morph, pre.fs);
+        // Provisional rate from beat intervals, shown only when the intervals agree with each other
+        const ibis = beats.slice(1).map((b, i) => (b.maxSlopePos - beats[i].maxSlopePos) / pre.fs).filter((v) => v > 0.3 && v < 2);
+        const sorted = [...ibis].sort((a, b) => a - b);
+        const med = sorted[sorted.length >> 1];
+        const consistent = ibis.length >= 4 && ibis.filter((v) => Math.abs(v - med) / med < 0.15).length >= 0.75 * ibis.length;
+        heartRate = consistent ? 60 / med : null;
         const lb = beats[beats.length - 1];
         if (lb) {
           const bt = pre.t0 + lb.maxSlopePos / pre.fs;

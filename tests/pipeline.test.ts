@@ -114,12 +114,13 @@ describe('realistic phone camera behaviour', () => {
 });
 
 describe('safety invariant: a passing recording never carries a wrong heart rate', () => {
-  it('holds across cases, camera models, seeds and a single movement episode', () => {
+  it('holds across cases, heart rates, camera models and seeds', () => {
     const failures: string[] = [];
     for (const id of ['a', 'b', 'c', 'motion']) {
       for (const camera of ['ideal', 'phone'] as const) {
-        for (const seed of [1, 2, 3, 4]) {
-          const c = { ...SYNTH_CASES.find((x) => x.id === id)!, seed };
+        for (const [seed, hr] of [[1, 0], [2, 45], [3, 100], [4, 140]]) {
+          const base = SYNTH_CASES.find((x) => x.id === id)!;
+          const c = { ...base, seed, heartRate: hr || base.heartRate };
           const r = analyse(synthesize(c, { durationSec: 65, camera }).frames, { heightCm: c.heightCm }, { kind: 'simulated', caseId: id }, { bootstrapIterations: 50 });
           if (r.quality?.pass && Math.abs(r.hrv!.heartRateBpm - c.heartRate) > 3) {
             failures.push(`${id}/${camera}/${seed}: ${r.hrv!.heartRateBpm.toFixed(1)} vs ${c.heartRate}`);

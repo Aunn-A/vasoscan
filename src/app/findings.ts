@@ -43,6 +43,16 @@ export interface Summary {
 }
 
 const round = (v: number, step = 1) => Math.round(v / step) * step;
+
+/** Wording that depends on whether the recording is a person's or a simulation. */
+function voice(r: AnalysisResult) {
+  const sim = r.provenance.kind === 'simulated';
+  return {
+    your: sim ? 'the' : 'your',
+    Your: sim ? 'The' : 'Your',
+    measured: sim ? 'Computed from simulation' : 'Measured',
+  };
+}
 const secs = (v: number) => `${Math.round(v)}`;
 
 export function analysedSeconds(r: AnalysisResult): number {
@@ -86,16 +96,17 @@ export function summarise(r: AnalysisResult): Summary {
     };
   }
   const hr = round(r.hrv.heartRateBpm);
+  const v = voice(r);
   const pattern = shapePattern(r);
   const shape = pattern === 'separate'
-    ? 'the reflected wave stays separate from the main peak'
+    ? 'each beat showed two distinct waves'
     : pattern === 'shoulder'
-      ? 'the reflected wave appears as a shoulder without a clear notch'
-      : 'the reflected wave has merged into the main peak';
+      ? 'each beat showed a main peak with a second wave as a shoulder'
+      : 'each beat showed a single broad peak, with the second wave merged into it';
   return {
     usable: true,
     verdict: warnings.length ? 'Recording usable, with parts left out' : 'Recording usable',
-    sentence: `A clear pulse was recorded for ${secs(cleanSeconds(r))} of ${secs(analysedSeconds(r))} seconds. Your heart rate averaged ${hr} beats per minute, and in the shape of your pulse ${shape}.`,
+    sentence: `A clear pulse was recorded for ${secs(cleanSeconds(r))} of ${secs(analysedSeconds(r))} seconds. ${v.Your} heart rate averaged ${hr} beats per minute, and ${shape}.`,
     problems,
     warnings,
   };
@@ -145,6 +156,7 @@ export function rateFinding(r: AnalysisResult): Finding | null {
   const h = r.hrv;
   if (!h || !r.quality?.pass) return null;
   const hr = round(h.heartRateBpm);
+  const v = voice(r);
   const valid = h.intervals.filter((i) => i.valid).map((i) => i.ms);
   const minBpm = round(60000 / Math.max(...valid));
   const maxBpm = round(60000 / Math.min(...valid));
@@ -164,8 +176,8 @@ export function rateFinding(r: AnalysisResult): Finding | null {
   return {
     id: 'rate',
     title: 'Heart rate and beat timing',
-    status: { level: 'neutral', label: 'Measured' },
-    takeaway: `Your pulse averaged ${hr} beats per minute, ranging from ${minBpm} to ${maxBpm} across the recording. ${variation}`,
+    status: { level: 'neutral', label: v.measured },
+    takeaway: `${v.Your} pulse averaged ${hr} beats per minute, ranging from ${minBpm} to ${maxBpm} across the recording. ${variation}`,
     explanation: `Each heartbeat was located in the signal and the time between neighbouring beats measured. ${h.validIntervals} of ${h.totalIntervals} intervals were usable.`,
     context: 'Some change in beat timing is normal: the heart speeds up slightly when you breathe in and slows when you breathe out. Heart rate and its variation also change with activity, posture, caffeine, stress and sleep, so a single one-minute reading describes this moment only. VasoScan does not assess heart rhythm or detect arrhythmias.',
     metrics,
@@ -177,11 +189,12 @@ export function shapeFinding(r: AnalysisResult, heightCm?: number): Finding | nu
   const u = r.score?.uncertainty;
   if (!m || !u) return null;
   const pattern = shapePattern(r)!;
+  const v = voice(r);
   const ct = round(m.crestTimeMs);
   const takeaway = {
-    separate: `Your pulse wave has two distinct parts: the main push from your heart, which peaked ${ct} ms after the pulse began, and a smaller reflected wave ${round(m.deltaTMs!)} ms later, separated by a clear notch.`,
-    shoulder: `Your pulse peaked ${ct} ms after it began. The reflected wave follows ${round(m.deltaTMs!)} ms later as a shoulder on the downslope, without a clear notch.`,
-    merged: `Your pulse peaked ${ct} ms after it began. The reflected wave has merged into the main peak, so its timing cannot be measured separately.`,
+    separate: `${v.Your} pulse wave has two distinct parts: the main push from the heart, which peaked ${ct} ms after the pulse began, and a smaller reflected wave ${round(m.deltaTMs!)} ms later, separated by a clear notch.`,
+    shoulder: `${v.Your} pulse peaked ${ct} ms after it began. The reflected wave follows ${round(m.deltaTMs!)} ms later as a shoulder on the downslope, without a clear notch.`,
+    merged: `${v.Your} pulse peaked ${ct} ms after it began. The reflected wave has merged into the main peak, so its timing cannot be measured separately.`,
   }[pattern];
   const notchPct = Math.round(u.notchPresentFraction * 100);
   const metrics: Metric[] = [
@@ -202,10 +215,10 @@ export function shapeFinding(r: AnalysisResult, heightCm?: number): Finding | nu
   return {
     id: 'shape',
     title: 'Pulse wave shape',
-    status: { level: 'neutral', label: 'Measured' },
+    status: { level: 'neutral', label: v.measured },
     takeaway,
     explanation: 'All usable heartbeats were lined up and averaged into one clean beat, shown on the right. Averaging cancels random noise, so the shape of the wave can be measured.',
-    context: 'Each heartbeat sends a pressure wave along your arteries, and part of it reflects back from further down the body. In more elastic arteries the reflection travels slowly, arriving late and staying separate from the main peak. In stiffer arteries it travels faster and returns sooner, merging with the peak. That is why pulse shape carries information about arterial stiffness. It is also affected by blood vessel tone, temperature and finger pressure.',
+    context: 'Each heartbeat sends a pressure wave along the arteries, and part of it reflects back from further down the body. In more elastic arteries the reflection travels slowly, arriving late and staying separate from the main peak. In stiffer arteries it travels faster and returns sooner, merging with the peak. That is why pulse shape carries information about arterial stiffness. It is also affected by blood vessel tone, temperature and finger pressure.',
     metrics,
   };
 }
@@ -213,6 +226,7 @@ export function shapeFinding(r: AnalysisResult, heightCm?: number): Finding | nu
 export function stiffnessFinding(r: AnalysisResult, ageYears?: number): Finding | null {
   const s = r.score;
   if (!s) return null;
+  const v = voice(r);
   const lo = round(s.uncertainty.score.lo);
   const hi = round(s.uncertainty.score.hi);
   const bandWord = { lower: 'lower', intermediate: 'intermediate', higher: 'higher' }[s.band];
@@ -241,15 +255,15 @@ export function stiffnessFinding(r: AnalysisResult, ageYears?: number): Finding 
     { label: 'Inputs available', value: `${s.contributions.length} of ${TERMS.length}`, note: missing.length ? `missing: ${missing.join(', ')}` : undefined },
   ];
   const ageNote = ageYears
-    ? ` Arterial stiffness normally increases with age; this indicator does not adjust for your age (${ageYears}).`
+    ? ` Arterial stiffness normally increases with age; this indicator does not adjust for age (${ageYears} entered).`
     : '';
   return {
     id: 'stiffness',
     title: 'Pulse stiffness indicator',
     status: { level: 'neutral', label: `${bandWord[0].toUpperCase()}${bandWord.slice(1)} range` },
-    takeaway: `The shape of your pulse places this indicator at ${round(s.score)} out of 100, in the ${bandWord} range${spans ? `, though its likely range of ${lo}–${hi} crosses into the ${bandOf(lo) === s.band ? bandOf(hi) : bandOf(lo)} range` : ` (likely ${lo}–${hi})`}. ${drivers}`,
+    takeaway: `The shape of ${v.your} pulse places this indicator at ${round(s.score)} out of 100, in the ${bandWord} range${spans ? `, though its likely range of ${lo}–${hi} crosses into the ${bandOf(lo) === s.band ? bandOf(hi) : bandOf(lo)} range` : ` (likely ${lo}–${hi})`}. ${drivers}`,
     explanation: 'The indicator combines the pulse shape measurements above into one number: higher values mean the pulse looks more like the pattern associated with stiffer arteries.',
-    context: `This indicator is experimental. Its weights were set by hand from published research, not learned from patient data, and it has not been checked against the clinical reference test for arterial stiffness (carotid–femoral pulse wave velocity). It is not a measurement of your arteries and cannot show whether any condition is present.${ageNote}`,
+    context: `This indicator is experimental. Its weights were set by hand from published research, not learned from patient data, and it has not been checked against the clinical reference test for arterial stiffness (carotid–femoral pulse wave velocity). It is not a measurement of ${v.your === 'your' ? 'your' : 'anyone’s'} arteries and cannot show whether any condition is present.${ageNote}`,
     metrics,
     experimental: true,
   };

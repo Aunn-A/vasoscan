@@ -1,0 +1,50 @@
+/*
+ * VasoScan design tokens.
+ * Palette: cool clinic grey-green ground, deep ink, and one signal colour reserved for the blood
+ * signal itself. Status never relies on colour: every status carries a word and an icon.
+ */
+:root {
+  --ground: #edf0ee;
+  --surface: #fafbfa;
+  --surface-sunk: #f2f5f3;
+  --ink: #13212b;
+  --ink-2: #3c4a53;
+  --ink-3: #5f6c74;
+  --line: #d3dad6;
+  --line-strong: #aab5b0;
+
+  --signal: #b4233a;
+  --signal-soft: #f4dde1;
+
+  --good: #1d6a50;
+  --good-tint: #dcede5;
+  --fair: #845400;
+  --fair-tint: #f5e9cf;
+  --poor: #9b3412;
+  --poor-tint: #f6e3da;
+
+  --sim: #574b8a;
+  --sim-tint: #e9e6f3;
+
+  --scope: #0b151b;
+  --scope-2: #13222b;
+  --scope-ink: #e7eeeb;
+  --scope-ink-2: #a9b8b2;
+
+  --font-display: 'Archivo Variable', 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+  --font-body: 'Public Sans Variable', 'Public Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --step--1: 0.8125rem;
+  --step-0: 1rem;
+  --step-1: 1.0625rem;
+  --step-2: 1.25rem;
+  --step-3: 1.5rem;
+  --step-4: clamp(1.75rem, 1.2rem + 2.2vw, 2.5rem);
+  --step-5: clamp(2.25rem, 1.4rem + 3.6vw, 3.75rem);
+
+  --radius: 8px;
+  --radius-lg: 14px;
+  --gutter: clamp(1rem, 0.6rem + 2vw, 2rem);
+  --measure: 38rem;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
