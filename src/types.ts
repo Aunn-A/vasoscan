@@ -6,8 +6,14 @@ export interface Frame {
   r: number;
   g: number;
   b: number;
-  /** Spatial standard deviation of red across the ROI (uniformity; a covered lens is uniform) */
+  /** Spatial standard deviation of red across the ROI */
   rStd: number;
+  /**
+   * Mean absolute difference between neighbouring ROI pixels in red, divided by mean red: local
+   * texture. A fingertip on the lens is out of focus and has almost none, even when the flash
+   * lights it unevenly; a scene has edges. Optional for recordings made before it existed.
+   */
+  rEdge?: number;
   /** Fraction of ROI pixels with red ≥ 250 / green ≥ 250 (sensor clipping) */
   rSat: number;
   gSat: number;

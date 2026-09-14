@@ -66,7 +66,7 @@ export const SYNTH_CASES: SynthCase[] = [
     perfusion: 0.006, noise: 0.25, seed: 37,
   },
   {
-    id: 'motion', label: 'Movement during capture', summary: 'Case A with hand movement and a lifted finger',
+    id: 'motion', label: 'Movement during capture', summary: 'Case A with repeated hand movement and a lifted finger',
     ageYears: 58, heightCm: 172, sex: 'M', heartRate: 64, rsaMs: 45, beatJitterMs: 18,
     pulse: { sysPeak: 0.15, sysK: 3, diaMu: 0.4, diaSigma: 0.07, diaAmp: 0.5 },
     perfusion: 0.012, noise: 0.25, artifact: 'motion', seed: 41,
@@ -114,6 +114,14 @@ export interface SynthOptions {
   fps?: number;
   frameJitterMs?: number;
   dropProbability?: number;
+  /**
+   * 'ideal': the camera reports scene intensity faithfully.
+   * 'phone': models the behaviour of a real phone camera that the ideal model hides, and that made
+   * early real-device recordings fail the quality gate: auto-exposure gain steps and drift,
+   * auto-white-balance pulling the finger's red towards neutral, uneven flash illumination across
+   * the image, breathing-related changes in pulse amplitude and baseline, and occasional odd frames.
+   */
+  camera?: 'ideal' | 'phone';
 }
 
 export function synthesize(c: SynthCase, opts: SynthOptions): SynthOutput {
@@ -149,6 +157,18 @@ export function synthesize(c: SynthCase, opts: SynthOptions): SynthOutput {
     return v;
   };
 
+  const phone = opts.camera === 'phone';
+  // Auto-exposure: gain steps at irregular intervals, each settling over ~0.3 s
+  const aeSteps: Array<{ t: number; ratio: number }> = [];
+  if (phone) {
+    for (let ts = 4 + 6 * rand(); ts < dur; ts += 6 + 8 * rand()) aeSteps.push({ t: ts, ratio: 1 + (rand() < 0.5 ? -1 : 1) * (0.04 + 0.08 * rand()) });
+  }
+  const aeGain = (tt: number) => {
+    let gain = 1 + 0.05 * Math.sin(2 * Math.PI * tt / 47);
+    for (const st of aeSteps) if (tt > st.t) gain *= 1 + (st.ratio - 1) * (1 - Math.exp(-(tt - st.t) / 0.3));
+    return gain;
+  };
+
   const frames: Frame[] = [];
   let t = 0;
   const dcBase = 200;
@@ -162,33 +182,49 @@ export function synthesize(c: SynthCase, opts: SynthOptions): SynthOutput {
     let pulsatile = c.perfusion;
     let covered = true;
     let extraNoise = 0;
+    // Finger movement changes how much blood is in the light path. Blood absorbs green far more
+    // than red, so green changes by a larger fraction than red (modelled as pressure² vs pressure).
+    // This is what distinguishes movement from a camera exposure change, which scales all channels
+    // equally.
+    let pressure = 1;
 
     if (c.artifact === 'motion') {
-      // Two movement episodes and a brief finger lift
-      if (t > 14 && t < 17) {
-        dc *= 0.86 + 0.08 * Math.sin(2 * Math.PI * 1.7 * t);
-        extraNoise = 6;
+      // Repeated movement and a finger lift: too little steady signal remains to analyse
+      for (const [a, b, depth] of [[9, 13, 0.86], [19, 23.5, 1.12], [37, 40, 0.88], [46, 50, 1.1], [55, 59, 0.9]]) {
+        if (t > a && t < b) {
+          pressure = depth + 0.08 * Math.sin(2 * Math.PI * 1.7 * t);
+          extraNoise = 6;
+        }
       }
-      if (t > 31 && t < 32.2) covered = false;
-      if (t > 44 && t < 47.5) {
-        dc *= 1.1 + 0.1 * Math.sin(2 * Math.PI * 0.9 * t);
-        extraNoise = 5;
-      }
+      if (t > 29 && t < 30.5) covered = false;
     }
     if (c.artifact === 'no-finger') covered = false;
 
     if (!covered) {
       const r = 110 + 20 * Math.sin(t * 0.7) + 3 * gaussian(rand);
-      frames.push({ t, r, g: r * 0.95, b: r * 0.85, rStd: 45 + 5 * rand(), rSat: 0.02, gSat: 0.01 });
+      frames.push({ t, r, g: r * 0.95, b: r * 0.85, rStd: 45 + 5 * rand(), rEdge: 0.2 + 0.05 * rand(), rSat: 0.02, gSat: 0.01 });
       continue;
     }
 
     // Blood volume increase absorbs light, so transmitted intensity falls during systole
     const bv = blood(t);
-    const r = dc * (1 - pulsatile * bv) + c.noise * gaussian(rand) + extraNoise * gaussian(rand);
-    const g = dc * 0.09 * (1 - pulsatile * 1.6 * bv) + c.noise * 0.6 * gaussian(rand);
+    if (phone) {
+      const breath = Math.sin(2 * Math.PI * 0.25 * t);
+      pulsatile *= 1 + 0.25 * breath;
+      const gain = aeGain(t) * (1 + 0.01 * breath);
+      const lum = dc * 0.65 * gain;
+      const r = pressure * lum * (1 - pulsatile * bv) + 1.4 * c.noise * gaussian(rand) + extraNoise * gaussian(rand);
+      // White balance leaves red dominant but far less so than the true transmitted spectrum
+      const g = pressure * pressure * lum * 0.5 * (1 - pulsatile * 1.4 * bv) + c.noise * gaussian(rand) + 0.5 * extraNoise * gaussian(rand);
+      const b = lum * 0.38 + c.noise * gaussian(rand);
+      const odd = rand() < 0.004 ? 1.25 : 1;
+      frames.push({ t, r: r * odd, g: g * odd, b: b * odd, rStd: r * (0.3 + 0.08 * rand()), rEdge: 0.02 + 0.02 * rand(), rSat: 0.02, gSat: 0 });
+      continue;
+    }
+    const r = pressure * dc * (1 - pulsatile * bv) + c.noise * gaussian(rand) + extraNoise * gaussian(rand);
+    const g = pressure * pressure * dc * 0.09 * (1 - pulsatile * 1.6 * bv) + c.noise * 0.6 * gaussian(rand) + 0.1 * extraNoise * gaussian(rand);
     const b = dc * 0.05 + c.noise * 0.5 * gaussian(rand);
-    frames.push({ t, r, g, b, rStd: 4 + rand(), rSat: 0, gSat: 0 });
+    frames.push({ t, r, g, b, rStd: 4 + rand(), rEdge: 0.01 + 0.01 * rand(), rSat: 0, gSat: 0 });
   }
   return { frames, beatTimes: beatTimes.filter((x) => x >= 0 && x <= dur), ibis };
 }

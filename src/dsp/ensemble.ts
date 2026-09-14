@@ -16,7 +16,16 @@
  * out: it slightly reduced APG error (aging index RMS 0.39 → 0.34) but increased crest-time error
  * (6.8 → 8.4 ms) and stiffness-index error (1.2 → 1.6 m/s), so it did not earn its complexity.
  *
- * Outlier beats (low correlation with the median beat) are rejected before the final average.
+ * Beat rejection targets outliers, not noise: a beat is rejected when its correlation with the
+ * median beat is below 0.5, or more than 3 robust standard deviations below the recording's median
+ * correlation. A fixed high threshold (the first version used r ≥ 0.85) rejected most beats of
+ * noisy but perfectly usable phone recordings, although averaging is exactly what removes that
+ * noise.
+ *
+ * Reliability of the average is measured by split-half correlation: accepted beats are divided
+ * alternately into two groups, each is averaged, and the two averages are correlated. This is the
+ * standard reliability check for averaged waveforms (as used for evoked potentials). If two
+ * independent halves of the recording give the same contour, the contour is reproducible.
  */
 import { interpAt } from './resample';
 import type { Beat } from './peaks';
@@ -32,6 +41,8 @@ export interface Ensemble {
   beatIndex: number[];
   correlations: number[];
   accepted: boolean[];
+  /** Correlation between the averages of alternate accepted beats (1 = perfectly reproducible) */
+  splitHalfR: number;
   alignIdx: number;
   /** Median beat period used for the window, seconds */
   period: number;
@@ -63,7 +74,7 @@ export function buildEnsemble(
   fs: number,
   beats: Beat[],
   period: number,
-  minCorrelation = 0.85,
+  absoluteMinCorrelation = 0.5,
 ): Ensemble {
   const pre = 0.3 * period;
   const post = 1.05 * period;
@@ -123,10 +134,17 @@ export function buildEnsemble(
 
   const med = medianBeat();
   const correlations = out.map((r) => pearson(r, med));
-  const accepted = correlations.map((r) => r >= minCorrelation);
-  const template = meanOf(out.filter((_, i) => accepted[i]));
+  const rMed = median(correlations);
+  const rMad = median(correlations.map((r) => Math.abs(r - rMed))) * 1.4826;
+  const cutoff = Math.max(absoluteMinCorrelation, rMed - 3 * Math.max(rMad, 0.01));
+  const accepted = correlations.map((r) => r >= cutoff);
+  const kept = out.filter((_, i) => accepted[i]);
+  const template = meanOf(kept);
+  const splitHalfR = kept.length >= 4
+    ? pearson(meanOf(kept.filter((_, i) => i % 2 === 0)), meanOf(kept.filter((_, i) => i % 2 === 1)))
+    : 0;
 
-  return { template, beats: out, beatIndex, correlations, accepted, alignIdx, period, fs: TEMPLATE_FS };
+  return { template, beats: out, beatIndex, correlations, accepted, splitHalfR, alignIdx, period, fs: TEMPLATE_FS };
 }
 
 export { median };

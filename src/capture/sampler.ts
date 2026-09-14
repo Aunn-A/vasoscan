@@ -116,13 +116,15 @@ export class FrameSampler {
     this.ctx.drawImage(v, (w - side) / 2, (h - side) / 2, side, side, 0, 0, g, g);
     const data = this.ctx.getImageData(0, 0, g, g).data;
     const n = g * g;
-    let r = 0, gr = 0, b = 0, r2 = 0, rSat = 0, gSat = 0;
+    let r = 0, gr = 0, b = 0, r2 = 0, rSat = 0, gSat = 0, edge = 0;
     for (let i = 0; i < data.length; i += 4) {
       const R = data[i], G = data[i + 1], B = data[i + 2];
       r += R; gr += G; b += B; r2 += R * R;
       if (R >= 250) rSat++;
       if (G >= 250) gSat++;
+      if ((i / 4) % g !== g - 1) edge += Math.abs(data[i + 4] - R);
     }
+    edge /= g * (g - 1);
     r /= n; gr /= n; b /= n;
     if (dedupe) {
       const sig = `${r.toFixed(3)},${gr.toFixed(3)},${b.toFixed(3)}`;
@@ -131,6 +133,6 @@ export class FrameSampler {
     }
     this.lastT = t;
     this.frameCount++;
-    this.onFrame({ t, r, g: gr, b, rStd: Math.sqrt(Math.max(0, r2 / n - r * r)), rSat: rSat / n, gSat: gSat / n });
+    this.onFrame({ t, r, g: gr, b, rStd: Math.sqrt(Math.max(0, r2 / n - r * r)), rEdge: r > 0 ? edge / r : 0, rSat: rSat / n, gSat: gSat / n });
   }
 }

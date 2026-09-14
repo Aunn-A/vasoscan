@@ -60,10 +60,11 @@ describe('full pipeline on synthetic recordings', () => {
     expect(r.score).toBeNull();
     const fail = r.quality!.issues.find((i) => i.severity === 'fail')!;
     expect(fail.code).toBe('motion');
-    // Injected movement at 14–17 s and 44–47.5 s of capture time
+    // Injected movement at 9–13 s and 46–50 s, finger lift at 29–30.5 s (capture time)
     const covers = (t: number) => fail.intervals!.some((iv) => iv.start <= t && iv.end >= t);
-    expect(covers(15.5)).toBe(true);
-    expect(covers(46)).toBe(true);
+    expect(covers(11)).toBe(true);
+    expect(covers(29.8)).toBe(true);
+    expect(covers(48)).toBe(true);
   });
 
   it('refuses to score when no finger covers the lens', () => {
@@ -75,5 +76,57 @@ describe('full pipeline on synthetic recordings', () => {
 
   it('keeps provenance on the result', () => {
     expect(results.a.r.provenance).toEqual({ kind: 'simulated', caseId: 'a' });
+  });
+});
+
+describe('realistic phone camera behaviour', () => {
+  // Auto-exposure steps, white balance, uneven flash light, breathing, odd frames
+  for (const id of ['a', 'b', 'c']) {
+    it(`case ${id}: passes the quality gate and recovers heart rate`, () => {
+      for (const seed of [101, 202]) {
+        const c = { ...SYNTH_CASES.find((x) => x.id === id)!, seed };
+        const r = analyse(synthesize(c, { durationSec: 65, camera: 'phone' }).frames, { heightCm: c.heightCm }, { kind: 'simulated', caseId: id }, { bootstrapIterations: 50 });
+        expect(r.quality!.pass, `${id}/${seed}: ${r.quality!.issues.map((i) => i.problem).join(' ')}`).toBe(true);
+        expect(Math.abs(r.hrv!.heartRateBpm - c.heartRate)).toBeLessThan(1.5);
+        expect(r.pre!.exposureSteps.length).toBeGreaterThan(0);
+      }
+    });
+  }
+
+  it('still refuses a recording with no pulse (finger pressed too hard)', () => {
+    const c = { ...SYNTH_CASES.find((x) => x.id === 'a')!, perfusion: 0.0003, seed: 7 };
+    const r = analyse(synthesize(c, { durationSec: 65, camera: 'phone' }).frames, {}, { kind: 'simulated', caseId: 'a' }, { bootstrapIterations: 50 });
+    expect(r.quality!.pass).toBe(false);
+    expect(r.score).toBeNull();
+  });
+
+  it('still refuses an uncovered lens', () => {
+    const c = { ...SYNTH_CASES.find((x) => x.id === 'no-finger')! };
+    const r = analyse(synthesize(c, { durationSec: 65, camera: 'phone' }).frames, {}, { kind: 'simulated', caseId: 'no-finger' });
+    expect(r.quality!.pass).toBe(false);
+  });
+
+  it('removes isolated exposure steps and single-frame glitches without losing signal', () => {
+    const c = { ...SYNTH_CASES.find((x) => x.id === 'b')!, seed: 303 };
+    const r = analyse(synthesize(c, { durationSec: 65, camera: 'phone' }).frames, {}, { kind: 'simulated', caseId: 'b' }, { bootstrapIterations: 50 });
+    expect(r.quality!.metrics.cleanFraction).toBeGreaterThan(0.85);
+  });
+});
+
+describe('safety invariant: a passing recording never carries a wrong heart rate', () => {
+  it('holds across cases, camera models, seeds and a single movement episode', () => {
+    const failures: string[] = [];
+    for (const id of ['a', 'b', 'c', 'motion']) {
+      for (const camera of ['ideal', 'phone'] as const) {
+        for (const seed of [1, 2, 3, 4]) {
+          const c = { ...SYNTH_CASES.find((x) => x.id === id)!, seed };
+          const r = analyse(synthesize(c, { durationSec: 65, camera }).frames, { heightCm: c.heightCm }, { kind: 'simulated', caseId: id }, { bootstrapIterations: 50 });
+          if (r.quality?.pass && Math.abs(r.hrv!.heartRateBpm - c.heartRate) > 3) {
+            failures.push(`${id}/${camera}/${seed}: ${r.hrv!.heartRateBpm.toFixed(1)} vs ${c.heartRate}`);
+          }
+        }
+      }
+    }
+    expect(failures).toEqual([]);
   });
 });

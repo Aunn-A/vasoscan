@@ -93,7 +93,8 @@ export function analyse(allFrames: Frame[], subject: Subject, provenance: Proven
   const quality = assessQuality({
     pre, statusFraction, mask,
     frameIntervals: reasons.frame, motionIntervals: reasons.motion,
-    acceptedBeats: accepted, candidateBeats: beats.length,
+    acceptedBeats: accepted, candidateBeats: ensemble ? ensemble.beats.length : 0,
+    splitHalfR: ensemble?.splitHalfR ?? 0,
     heartRateBpm: hrv?.heartRateBpm ?? spectralHr,
     durationSec: frames[frames.length - 1].t - frames[0].t,
   });
